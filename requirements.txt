@@ -1,5 +1,8 @@
+pbr!=2.1.0,>=5.4.1 # Apache-2.0
+
 urllib3
 prometheus_client
 requests
 pyyaml
 master_password
+openstacksdk

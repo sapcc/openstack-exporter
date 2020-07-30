@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = openstack_exporter
+omit = openstack_exporter/tests/*
+
+[report]
+ignore_errors = True
