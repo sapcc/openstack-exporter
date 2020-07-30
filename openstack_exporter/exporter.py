@@ -15,10 +15,11 @@
 import os
 import time
 
-from collectors.CinderCollector import CinderCollector
 from optparse import OptionParser
 from prometheus_client.core import REGISTRY
 from prometheus_client import start_http_server
+
+from openstack_exporter.collectors import CinderCollector
 
 
 def parse_params():
@@ -51,11 +52,15 @@ def parse_params():
 
 def run_prometheus_server(port):
     start_http_server(int(port))
-    REGISTRY.register(CinderCollector())
+    REGISTRY.register(CinderCollector.CinderCollector())
     while True:
         time.sleep(1)
 
 
-if __name__ == '__main__':
+def main():
     options = parse_params()
     run_prometheus_server(options.port)
+
+
+if __name__ == '__main__':
+    main()

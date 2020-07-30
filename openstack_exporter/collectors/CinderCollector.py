@@ -14,10 +14,10 @@
 
 from prometheus_client.core import GaugeMetricFamily
 
-from BaseCollector import BaseCollector
+from openstack_exporter import BaseCollector
 
 
-class CinderCollector(BaseCollector):
+class CinderCollector(BaseCollector.BaseCollector):
     def __init__(self):
         pass
 
