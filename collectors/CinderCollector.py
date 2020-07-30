@@ -1,6 +1,5 @@
 from prometheus_client.core import GaugeMetricFamily
 from BaseCollector import BaseCollector
-from modules.Connection import Connection
 
 
 class CinderCollector(BaseCollector):
@@ -9,7 +8,7 @@ class CinderCollector(BaseCollector):
 
     def describe(self):
         # all your metrics go in here, without a label
-        # yield GaugeMetricFamily('vcsa_service_status', 'Health Status of vCSA Services')
+        yield GaugeMetricFamily('cinder_foo_stat', 'Cinder status of foo')
 
     def collect(self):
         # logic goes in here
