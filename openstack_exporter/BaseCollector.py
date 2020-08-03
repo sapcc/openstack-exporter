@@ -13,10 +13,46 @@
 #    under the License.
 
 from abc import ABC, abstractmethod
-import yaml
+import logging
+import sys
+
+import openstack
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+LOG = logging.getLogger('openstack_exporter.exporter')
+openstack.enable_logging(debug=False, http_debug=False, stream=sys.stdout)
 
 
 class BaseCollector(ABC):
+
+    def __init__(self, openstack_config):
+        self.config = openstack_config
+        self.region = self.config['region']
+        self.client = self._connect()
+
+    def _connect(self):
+        """Connect to the OpenStack Service."""
+
+        LOG.debug("Connecting to Openstack API {}".format(
+            self.config['auth_url']
+        ))
+        conn = openstack.connect(
+            auth_url=self.config['auth_url'],
+            username=self.config['username'],
+            password=self.config['password'],
+            user_domain_name=self.config['user_domain_name'],
+            project_domain_name=self.config['project_domain_name'],
+            project_name=self.config['project_name'],
+            region_name=self.region,
+            app_name='Openstack prometheus exporter',
+            app_version='1.0'
+        )
+        LOG.debug("Connected to OpenStack {}".format(
+            self.config['auth_url']
+        ))
+        return conn
+
     @abstractmethod
     def describe(self):
         pass
@@ -24,8 +60,3 @@ class BaseCollector(ABC):
     @abstractmethod
     def collect(self):
         pass
-
-    def read_rest_yaml(self):
-        with open('./rest.yaml') as yaml_file:
-            rest_yaml = yaml.safe_load(yaml_file)
-        return rest_yaml

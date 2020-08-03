@@ -12,54 +12,76 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import click
+import logging
 import os
+import sys
 import time
 
-from optparse import OptionParser
 from prometheus_client.core import REGISTRY
 from prometheus_client import start_http_server
+import yaml
 
-from openstack_exporter.collectors import CinderCollector
-
-
-def parse_params():
-    parser = OptionParser()
-    parser.add_option("-o", "--port",
-                      action="store", dest="port",
-                      help="specify exporter serving port")
-    parser.add_option("-d", "--debug",
-                      action="store_true", dest="debug",
-                      default=False,
-                      help="enable debug")
-    parser.add_option("-c", "--config",
-                      action="store", dest="config",
-                      help="path to rest config")
-    parser.add_option("-u", "--user",
-                      action="store", dest="user",
-                      help="user used with master password")
-    parser.add_option("-p", "--password",
-                      action="store", dest="password",
-                      help="specify password to log in")
-
-    (options, args) = parser.parse_args()
-    if options.debug:
-        print('DEBUG enabled')
-        os.environ['DEBUG'] = "1"
-    else:
-        os.environ['DEBUG'] = "0"
-    return options
+from openstack_exporter.collectors import cinderbackend
 
 
-def run_prometheus_server(port):
+def run_prometheus_server(port, openstack_config):
     start_http_server(int(port))
-    REGISTRY.register(CinderCollector.CinderCollector())
+    REGISTRY.register(cinderbackend.CinderBackendCollector(openstack_config))
     while True:
         time.sleep(1)
 
 
-def main():
-    options = parse_params()
-    run_prometheus_server(options.port)
+def get_config(config_file):
+    if os.path.exists(config_file):
+        try:
+            with open(config_file) as f:
+                config = yaml.load(f, Loader=yaml.FullLoader)
+        except IOError as e:
+            logging.error("Couldn't open configuration file: " + str(e))
+        return config
+    else:
+        logging.error("Config file doesn't exist: " + config_file)
+        exit(0)
+
+
+@click.command()
+@click.option("--port", metavar="<port>", default=9102,
+              help="specify exporter serving port")
+@click.option("-d", "--debug", metavar="<debug>", is_flag=True,
+              default=False, help="enable debug")
+@click.option("-c", "--config", metavar="<config>",
+              help="path to rest config")
+@click.option("-u", "--user", metavar="<user>",
+              help="user used with master password")
+@click.option("-p", "--password", metavar="<password>",
+              help="specify password to log in")
+@click.version_option()
+@click.help_option()
+def main(port, debug, config, user, password):
+    if not config:
+        raise click.ClickException("Missing OpenStack config yaml --config")
+
+    config_obj = get_config(config)
+    exporter_config = config_obj['exporter']
+    os_config = config_obj['openstack']
+
+    log = logging.getLogger(__name__)
+    if exporter_config['log_level']:
+        log.setLevel(logging.getLevelName(
+            exporter_config['log_level'].upper()))
+    else:
+        log.setLevel(logging.getLevelName("INFO"))
+
+    format = '[%(asctime)s] [%(levelname)s] %(message)s'
+    logging.basicConfig(stream=sys.stdout, format=format)
+
+    log.info("Starting OpenStack Exporter on port={} config={}".format(
+        port,
+        config
+    ))
+
+    run_prometheus_server(port, os_config)
 
 
 if __name__ == '__main__':
