@@ -8,6 +8,6 @@ RUN git clone https://github.com/sapcc/openstack-exporter.git
 RUN pip3 install --upgrade pip
 
 ADD . openstack-exporter/
-RUN pip3 install --upgrade -r openstack-exporter/requirements.txt
+RUN cd openstack-exporter && pip3 install .
 
 WORKDIR openstack-exporter

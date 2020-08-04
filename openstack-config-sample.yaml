@@ -1,0 +1,11 @@
+exporter:
+  log_level: INFO
+  prometheus_port: 9102
+openstack:
+  auth_url: https://identity-3.qa-de-1.cloud.sap/v3
+  username: <username here>
+  password: <password here>
+  user_domain_name: ccadmin
+  project_domain_name: ccadmin
+  project_name: cloud_admin
+  region: qa-de-1
