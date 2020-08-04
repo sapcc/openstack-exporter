@@ -23,17 +23,17 @@ LOG = logging.getLogger('openstack_exporter.exporter')
 class CinderBackendCollector(BaseCollector.BaseCollector):
 
     def describe(self):
-        yield GaugeMetricFamily('cinder_total_capacity',
+        yield GaugeMetricFamily('cinder_total_capacity_gib',
                                 'Cinder total capacity in GiB')
-        yield GaugeMetricFamily('cinder_free_capacity',
+        yield GaugeMetricFamily('cinder_free_capacity_gib',
                                 'Cinder free capacity in GiB')
-        yield GaugeMetricFamily('cinder_allocated_capacity',
+        yield GaugeMetricFamily('cinder_allocated_capacity_gib',
                                 'Cinder allocated capacity in GiB')
         yield GaugeMetricFamily('cinder_max_oversubscription_ratio',
                                 'Cinder max overcommit ratio')
         yield GaugeMetricFamily('cinder_overcommit_ratio',
                                 'Cinder Overcommit ratio')
-        yield GaugeMetricFamily('cinder_free_until_overcommit',
+        yield GaugeMetricFamily('cinder_free_until_overcommit_gib',
                                 'Cinder free space until Overcommit reached')
 
     def collect(self):
@@ -52,21 +52,21 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 shard_name,
                 backend))
 
-            g = GaugeMetricFamily('cinder_total_capacity',
+            g = GaugeMetricFamily('cinder_total_capacity_gib',
                                   'Cinder total capacity in GiB',
                                   labels=['backend', 'shard'])
             g.add_metric([backend, shard_name],
                          value=caps['total_capacity_gb'])
             yield g
 
-            g = GaugeMetricFamily('cinder_free_capacity',
+            g = GaugeMetricFamily('cinder_free_capacity_gib',
                                   'Cinder free capacity in GiB',
                                   labels=['backend', 'shard'])
             g.add_metric([backend, shard_name],
                          value=caps['free_capacity_gb'])
             yield g
 
-            g = GaugeMetricFamily('cinder_allocated_capacity',
+            g = GaugeMetricFamily('cinder_allocated_capacity_gib',
                                   'Cinder allocated capacity in GiB',
                                   labels=['backend', 'shard'])
             g.add_metric([backend, shard_name],
@@ -98,7 +98,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 tmp = (caps['total_capacity_gb'] *
                     float(caps['max_over_subscription_ratio']))
                 free_until_overcommit = tmp - caps['allocated_capacity_gb']
-            g = GaugeMetricFamily('cinder_free_until_overcommit',
+            g = GaugeMetricFamily('cinder_free_until_overcommit_gib',
                                   'Cinder free space until Overcommit in GiB',
                                   labels=['backend', 'shard'])
             g.add_metric([backend, shard_name],

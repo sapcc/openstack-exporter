@@ -48,17 +48,11 @@ def get_config(config_file):
 @click.command()
 @click.option("--port", metavar="<port>", default=9102,
               help="specify exporter serving port")
-@click.option("-d", "--debug", metavar="<debug>", is_flag=True,
-              default=False, help="enable debug")
 @click.option("-c", "--config", metavar="<config>",
               help="path to rest config")
-@click.option("-u", "--user", metavar="<user>",
-              help="user used with master password")
-@click.option("-p", "--password", metavar="<password>",
-              help="specify password to log in")
 @click.version_option()
 @click.help_option()
-def main(port, debug, config, user, password):
+def main(port, config):
     if not config:
         raise click.ClickException("Missing OpenStack config yaml --config")
 
