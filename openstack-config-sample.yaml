@@ -9,3 +9,8 @@ openstack:
   project_domain_name: ccadmin
   project_name: cloud_admin
   region: qa-de-1
+
+collectors:
+  cinderbackend:
+    collector: openstack_exporter.collectors.cinderbackend.CinderBackendCollector
+    enabled: True
