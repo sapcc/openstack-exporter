@@ -23,6 +23,9 @@ from prometheus_client.core import REGISTRY
 from prometheus_client import start_http_server
 import yaml
 
+import openstack_exporter
+
+
 LOG = logging.getLogger(__name__)
 
 
@@ -104,7 +107,8 @@ def main(port, config):
     format = '[%(asctime)s] [%(levelname)s] %(message)s'
     logging.basicConfig(stream=sys.stdout, format=format)
 
-    LOG.info("Starting OpenStack Exporter on port={} config={}".format(
+    LOG.info("Starting OpenStack Exporter {} on port={} config={}".format(
+        openstack_exporter.version_string(),
         port,
         config
     ))
