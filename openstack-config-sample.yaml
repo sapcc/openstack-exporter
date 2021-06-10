@@ -5,7 +5,7 @@ openstack:
   auth_url: https://identity-3.qa-de-1.cloud.sap/v3
   username: <username here>
   password: <password here>
-  user_domain_name: ccadmin
+  user_domain_name: Default
   project_domain_name: ccadmin
   project_name: cloud_admin
   region: qa-de-1
@@ -13,4 +13,7 @@ openstack:
 collectors:
   cinderbackend:
     collector: openstack_exporter.collectors.cinderbackend.CinderBackendCollector
+    enabled: True
+  novabackend:
+    collector: openstack_exporter.collectors.novaservice.NovaServiceCollector
     enabled: True
