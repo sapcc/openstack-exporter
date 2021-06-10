@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM keppel.eu-de-1.cloud.sap/ccloud-dockerhub-mirror/library/alpine:3.12
 
 LABEL source_repository="https://github.com/sapcc/openstack-exporter"
 RUN apk --update add python3 openssl ca-certificates bash python3-dev  git py3-pip && \
