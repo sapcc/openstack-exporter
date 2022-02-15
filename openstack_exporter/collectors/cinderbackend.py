@@ -12,8 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import math
 import logging
+import math
 from prometheus_client.core import GaugeMetricFamily, InfoMetricFamily
 
 from openstack_exporter import BaseCollector
@@ -60,6 +60,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
 
         data["can_overcommit"] = can_overcommit
         data['total_capacity_gb'] = caps.get('total_capacity_gb', 0)
+        data['max_over_subscription_ratio'] = caps.get('max_over_subscription_ratio', 0)
 
         if data['total_capacity_gb'] > 0:
             overcommit_ratio = caps['allocated_capacity_gb'] / data['total_capacity_gb']
@@ -72,8 +73,9 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         if (data['total_capacity_gb'] > 0 and 'max_over_subscription_ratio'
                 in caps):
             free_until_overcommit = (
-                data['total_capacity_gb'] * float(caps['max_over_subscription_ratio'])
-                - caps['allocated_capacity_gb'])
+                data['total_capacity_gb'] *
+                float(caps['max_over_subscription_ratio']) -
+                caps['allocated_capacity_gb'])
         data['free_until_overcommit'] = free_until_overcommit
         data['free_capacity_gb'] = caps.get('free_capacity_gb', 0)
 
@@ -83,7 +85,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             percent_left = 0
         data['percent_left'] = percent_left
 
-        data['allocated_capacity_gb'] = caps.get('allocated_capacity', 0)
+        data['allocated_capacity_gb'] = caps.get('allocated_capacity_gb', 0)
         data['reserved_percentage'] = caps.get('reserved_percentage', 0)
         if data['reserved_percentage'] > 0:
             reserved_percentage = float(data['reserved_percentage']) / 100
@@ -98,7 +100,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             else:
                 available_left_percent = 0
             data['available_until_reserved'] = available_capacity_gb
-            data['available_until_reserved_percent'] = available_left_percent
+            data['available_until_reserved_percent'] = f"{available_left_percent:0.1f}"
         else:
             data['available_capacity_gb'] = data['free_capacity_gb']
             data['available_until_reserved'] = 0
@@ -200,31 +202,28 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 g.add_metric([backend, pool_name, shard_name],
                              value=data['free_until_overcommit'])
                 yield g
-            else:
-                g = GaugeMetricFamily('cinder_reserved_precentage',
-                                      'Cinder Reserved Space Percentage',
-                                      labels=['backend', 'pool', 'shard'])
-                g.add_metric([backend, pool_name, shard_name],
-                             value=data['reserved_percentage'])
 
-                yield g
+            g = GaugeMetricFamily('cinder_reserved_precentage',
+                                  'Cinder Reserved Space Percentage',
+                                  labels=['backend', 'pool', 'shard'])
+            g.add_metric([backend, pool_name, shard_name],
+                         value=data['reserved_percentage'])
 
-                g = GaugeMetricFamily('cinder_free_until_reserved_achieved_gib',
-                                      'Cinder free space until Reserved Percentage Met',
-                                      labels=['backend', 'pool', 'shard'])
-                g.add_metric([backend, pool_name, shard_name],
-                             value=data['available_capacity_gb'])
-                yield g
+            yield g
 
-                g = GaugeMetricFamily('cinder_reserved_percent_available',
-                                      'Cinder percentage available until reserved is met',
-                                      labels=['backend', 'pool', 'shard'])
-                g.add_metric([backend, pool_name, shard_name],
-                             value=data['available_until_reserved_percent'])
-                yield g
+            g = GaugeMetricFamily('cinder_free_until_reserved_achieved_gib',
+                                  'Cinder free space until Reserved Percentage Met',
+                                  labels=['backend', 'pool', 'shard'])
+            g.add_metric([backend, pool_name, shard_name],
+                         value=data['available_capacity_gb'])
+            yield g
 
-
-
+            g = GaugeMetricFamily('cinder_reserved_percent_available',
+                                  'Cinder percentage available until reserved is met',
+                                  labels=['backend', 'pool', 'shard'])
+            g.add_metric([backend, pool_name, shard_name],
+                         value=data['available_until_reserved_percent'])
+            yield g
 
             LOG.debug('({}/{}/{})-provisioning_type = {}'.format(
                 shard_name, data['backend'], data['pool'],
@@ -249,19 +248,23 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                     data['free_until_overcommit']
                 ))
                 LOG.debug('({}/{}/{})-max_over_subscription_ratio = {}'.format(
-                    shard_name, caps['volume_backend_name'], pool['pool'],
+                    shard_name, caps['volume_backend_name'], data['pool'],
                     caps['max_over_subscription_ratio']
                 ))
                 LOG.debug('({}/{}/{})-overcommit_ratio = {}'.format(
-                    shard_name, caps['volume_backend_name'], pool['pool'],
+                    shard_name, caps['volume_backend_name'], data['pool'],
                     data['overcommit_ratio']
                 ))
-            else:
-                LOG.debug('({}/{}/{})-reserved_percentage = {}'.format(
-                    shard_name, caps['volume_backend_name'], data['pool'],
-                    data['reserved_percentage']
-                ))
-                LOG.debug('({}/{}/{})-free_until_reserved_met = {}'.format(
-                    shard_name, caps['volume_backend_name'], data['pool'],
-                    data['available_capacity_gb']
-                ))
+
+            LOG.debug('({}/{}/{})-reserved_percentage = {}'.format(
+                shard_name, caps['volume_backend_name'], data['pool'],
+                data['reserved_percentage']
+            ))
+            LOG.debug('({}/{}/{})-free_until_reserved_met = {}'.format(
+                shard_name, caps['volume_backend_name'], data['pool'],
+                data['available_capacity_gb']
+            ))
+            LOG.debug('({}/{}/{})-cinder_reserved_percent_available = {}'.format(
+                shard_name, caps['volume_backend_name'], data['pool'],
+                data['available_until_reserved_percent']
+            ))
