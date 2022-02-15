@@ -42,6 +42,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                                 'Cinder free space until Overcommit reached')
         yield GaugeMetricFamily('cinder_free_until_reserved_achieved_gib',
                                 'Cinder free space until Reserved Percentage Met')
+        yield GaugeMetricFamily('cinder_reserved_percent_available',
+                                "Cinder percentage available until reserved is met")
 
     def _parse_pool_data(self, pool, volume_type):
         """Construct the data from the pool information from the scheduler."""
@@ -99,6 +101,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             data['available_until_reserved_percent'] = available_left_percent
         else:
             data['available_capacity_gb'] = data['free_capacity_gb']
+            data['available_until_reserved'] = 0
+            data['available_until_reserved_percent'] = 0
 
         if can_overcommit:
             data['current_overcommit'] = overcommit_ratio
@@ -211,6 +215,15 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 g.add_metric([backend, pool_name, shard_name],
                              value=data['available_capacity_gb'])
                 yield g
+
+                g = GaugeMetricFamily('cinder_reserved_percent_available',
+                                      'Cinder percentage available until reserved is met',
+                                      labels=['backend', 'pool', 'shard'])
+                g.add_metric([backend, pool_name, shard_name],
+                             value=data['available_until_reserved_percent'])
+                yield g
+
+
 
 
             LOG.debug('({}/{}/{})-provisioning_type = {}'.format(
