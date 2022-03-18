@@ -43,40 +43,94 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         yield GaugeMetricFamily('cinder_reserved_percentage',
                                 'Cinder Reserved Space Percentage')
 
-    def calculate_virtual_free_capacity(self,
-                                        total_capacity,
-                                        free_capacity,
-                                        provisioned_capacity,
-                                        thin_provisioning_support,
-                                        max_over_subscription_ratio,
-                                        reserved_percentage,
-                                        thin):
-        """Calculate the virtual free capacity based on thin provisioning support.
-        :param total_capacity:  total_capacity_gb of a host_state or pool.
-        :param free_capacity:   free_capacity_gb of a host_state or pool.
-        :param provisioned_capacity:    provisioned_capacity_gb of a host_state
-                                        or pool.
-        :param thin_provisioning_support:   thin_provisioning_support of
-                                            a host_state or a pool.
-        :param max_over_subscription_ratio: max_over_subscription_ratio of
-                                            a host_state or a pool
-        :param reserved_percentage: reserved_percentage of a host_state or
-                                    a pool.
-        :param thin: whether volume to be provisioned is thin
-        :returns: the calculated virtual free capacity.
+    def calculate_capacity_factors(self,
+                                   total_capacity: float,
+                                   free_capacity: float,
+                                   provisioned_capacity: float,
+                                   thin_provisioning_support: bool,
+                                   max_over_subscription_ratio: float,
+                                   reserved_percentage: float,
+                                   thin: bool) -> dict:
+        """Create the various capacity factors of the a particular backend.
+
+        Based off of definition of terms
+        cinder-specs/specs/queens/provisioning-improvements.html
+
+        total_capacity - The reported total capacity in the backend.
+        free_capacity - The free space/capacity as reported by the backend.
+        reserved_capacity - The amount of space reserved from the total_capacity
+        as reported by the backend.
+        total_reserved_available_capacity - The total capacity minus reserved
+        capacity
+
+        max_over_subscription_ratio - as reported by the backend
+        total_available_capacity - The total capacity available to cinder
+        calculated
+        thick: total_reserved_available_capacity
+        OR
+        thin: total_reserved_available_capacity and max_over_subscription_ratio
+
+        provisioned_capacity - as reported by backend or volume manager
+        (allocated_capacity_gb)
+
+        calculated_free_capacity - total_available_capacity - provisioned_capacity
+        virtual_free_capacity - The calculated free capacity available to cinder
+        to allocate new storage.
+        For thin: calculated_free_capacity
+        For thick: the reported free_capacity can be less than the calculated
+        Capacity, so we use free_capacity - reserved_capacity.
+
+        free_percent - the percentage of the virtual_free and
+        total_available_capacity is left over
+        provisioned_ratio - The ratio of provisioned storage to
+        total_available_capacity
         """
 
         total = float(total_capacity)
         reserved = float(reserved_percentage) / 100
-        total_avail = total - math.floor(total * reserved)
+        reserved_capacity = math.floor(total * reserved)
+        total_reserved_available = total - reserved_capacity
 
         if thin and thin_provisioning_support:
-            free = (total_avail * max_over_subscription_ratio - provisioned_capacity)
+            total_available_capacity = (
+                total_reserved_available * max_over_subscription_ratio
+            )
+            calculated_free = total_available_capacity - provisioned_capacity
+            virtual_free = calculated_free
+            provisioned_type = 'thin'
         else:
             # Calculate how much free space is left after taking into
             # account the reserved space.
-            free = free_capacity - math.floor(total * reserved)
-        return free
+            total_available_capacity = total_reserved_available
+            calculated_free = total_available_capacity - provisioned_capacity
+            virtual_free = calculated_free
+            if free_capacity < calculated_free:
+                virtual_free = free_capacity
+            provisioned_type = 'thick'
+
+        if total_available_capacity:
+            provisioned_ratio = provisioned_capacity / total_available_capacity
+            free_percent = (virtual_free / total_available_capacity) * 100
+        else:
+            provisioned_ratio = 0
+            free_percent = 0
+
+        return {
+            "total_capacity": total,
+            "free_capacity": free_capacity,
+            "reserved_capacity": reserved_capacity,
+            "total_reserved_available_capacity": int(total_reserved_available),
+            "max_over_subscription_ratio": (
+                max_over_subscription_ratio if provisioned_type == 'thin' else None
+            ),
+            "total_available_capacity": int(total_available_capacity),
+            "provisioned_capacity": provisioned_capacity,
+            "calculated_free_capacity": int(calculated_free),
+            "virtual_free_capacity": int(virtual_free),
+            "free_percent": free_percent,
+            "provisioned_ratio": provisioned_ratio,
+            "provisioned_type": provisioned_type
+        }
 
     def _parse_pool_data(self, pool, volume_type):
         """Construct the data from the pool information from the scheduler."""
@@ -92,46 +146,33 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         if volume_type['extra_specs'].get('provisioning:type') != 'thick':
             can_overcommit = True
 
-        data["can_overcommit"] = can_overcommit
         total_capacity_gb = caps.get('total_capacity_gb', 0)
-        data['total_capacity_gb'] = total_capacity_gb
-        max_over_subscription_ratio = float(caps.get('max_over_subscription_ratio', 1))
-        data['max_over_subscription_ratio'] = max_over_subscription_ratio
-        data['provisioned_capacity_gb'] = caps.get('provisioned_capacity_gb', 0)
-
         allocated_capacity_gb = caps.get('allocated_capacity_gb', 0)
         reserved_percentage = caps.get('reserved_percentage', 0)
-        if reserved_percentage:
-            available_capacity_gb = total_capacity_gb - math.floor(
-                total_capacity_gb * (reserved_percentage / 100))
-        else:
-            available_capacity_gb = total_capacity_gb
-
-        if can_overcommit:
-            available_capacity_gb = math.floor(available_capacity_gb * max_over_subscription_ratio)
-
-        if allocated_capacity_gb > 0 and available_capacity_gb > 0:
-            overcommit_ratio = allocated_capacity_gb / available_capacity_gb
-        else:
-            overcommit_ratio = 0
-        data['overcommit_ratio'] = overcommit_ratio
-
+        max_over_subscription_ratio = float(
+            caps.get('max_over_subscription_ratio', 1)
+        )
         free_capacity_gb = caps.get('free_capacity_gb', 0)
-        virtual_free_gb = math.floor(
-            self.calculate_virtual_free_capacity(
-                total_capacity_gb,
-                free_capacity_gb,
-                allocated_capacity_gb,
-                caps.get('thin_provisioning_support', False),
-                max_over_subscription_ratio,
-                reserved_percentage,
-                can_overcommit,
-            ))
 
-        if total_capacity_gb > 0:
-            percent_left = (virtual_free_gb / available_capacity_gb) * 100
-        else:
-            percent_left = 0
+        capacity_factors = self.calculate_capacity_factors(
+            total_capacity_gb,
+            free_capacity_gb,
+            allocated_capacity_gb,
+            caps.get('thin_provisioning_support', False),
+            max_over_subscription_ratio,
+            reserved_percentage,
+            can_overcommit,
+        )
+        available_capacity_gb = capacity_factors["total_available_capacity"]
+        virtual_free_gb = capacity_factors["virtual_free_capacity"]
+        percent_left = capacity_factors["free_percent"]
+        overcommit_ratio = capacity_factors["provisioned_ratio"]
+
+        data["can_overcommit"] = can_overcommit
+        data['total_capacity_gb'] = total_capacity_gb
+        data['max_over_subscription_ratio'] = max_over_subscription_ratio
+        data['provisioned_capacity_gb'] = caps.get('provisioned_capacity_gb', 0)
+        data['overcommit_ratio'] = overcommit_ratio
 
         data['available_capacity_gb'] = available_capacity_gb
         data['allocated_capacity_gb'] = allocated_capacity_gb
