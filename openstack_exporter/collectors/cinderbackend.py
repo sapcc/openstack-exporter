@@ -16,6 +16,7 @@ import logging
 import math
 from prometheus_client.core import GaugeMetricFamily, InfoMetricFamily
 
+from cinderclient import client as cinder
 from openstack_exporter import BaseCollector
 
 LOG = logging.getLogger('openstack_exporter.exporter')
@@ -23,7 +24,46 @@ LOG = logging.getLogger('openstack_exporter.exporter')
 
 class CinderBackendCollector(BaseCollector.BaseCollector):
 
+    def __init__(self, openstack_config):
+        super().__init__(openstack_config)
+        # We have to create a cinder client here
+        # because the openstacksdk doesn't currently
+        # Support the quota functions.
+        self.cinder_client = self._cinder_client()
+
+    def _cinder_client(self):
+        """openstacksdk doesn't have quota functions yet."""
+        os_auth_url = self.config['auth_url']
+        os_username = self.config['username']
+        os_password = self.config['password']
+        os_project_name = self.config['project_name']
+        api_version = 3.70
+
+        client_args = dict(
+            region_name=self.region,
+            service_type="volumev3",
+            service_name='',
+            os_endpoint='',
+            endpoint_type="publicURL",
+            insecure=False,
+            cacert=None,
+            auth_plugin=None,
+            http_log_debug=True,
+            session=self.client.session,
+        )
+
+        return cinder.Client(
+            api_version,
+            os_username,
+            os_password,
+            os_project_name,
+            os_auth_url,
+            **client_args,
+        )
+
     def describe(self):
+        yield GaugeMetricFamily('cinder_per_volume_gigabytes',
+                                'Cinder max volume size')
         yield InfoMetricFamily('cinder_provisioning_type',
                                'Cinder provisioning type')
         yield GaugeMetricFamily('cinder_total_capacity_gib',
@@ -196,6 +236,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         LOG.info("Collect cinder backend info. {}".format(
             self.config['auth_url']
         ))
+        project_id = self.client.volume.get_project_id()
+        quota_obj = self.cinder_client.quotas.defaults(project_id)
 
         v_types = list(self.client.volume.types())
         # Ignore volume types that aren't tied to a backend.
@@ -216,6 +258,13 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             volume_type = volume_types[backend]
             data = self._parse_pool_data(pool, volume_type)
             pool_name = data['pool']
+
+            g = GaugeMetricFamily('cinder_per_volume_gigabytes',
+                                  'Cinder max volume size in GiB',
+                                  labels=['backend', 'pool', 'shard'])
+            g.add_metric([backend, pool_name, shard_name],
+                         value=quota_obj.per_volume_gigabytes)
+            yield g
 
             # The volume backend can do overcommit if and only if
             # the backdnd and volume type are set to thin provisioning.
@@ -289,6 +338,11 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                          value=data['reserved_percentage'])
 
             yield g
+
+            LOG.debug('({}/{}/{})-per_volume_gigabytes = {}'.format(
+                shard_name, data['backend'], data['pool'],
+                quota_obj.per_volume_gigabytes
+            ))
 
             LOG.debug('({}/{}/{})-provisioning_type = {}'.format(
                 shard_name, data['backend'], data['pool'],
