@@ -23,6 +23,7 @@ LOG = logging.getLogger('openstack_exporter.exporter')
 
 
 class CinderBackendCollector(BaseCollector.BaseCollector):
+    version = "1.0.2"
 
     def __init__(self, openstack_config):
         super().__init__(openstack_config)
@@ -30,6 +31,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         # because the openstacksdk doesn't currently
         # Support the quota functions.
         self.cinder_client = self._cinder_client()
+        self.labels = ['backend', 'pool', 'shard']
+        LOG.debug(f"Openstack Exporter CinderBackend Version {self.version}")
 
     def _cinder_client(self):
         """openstacksdk doesn't have quota functions yet."""
@@ -82,6 +85,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                                 'Cinder Overcommit ratio')
         yield GaugeMetricFamily('cinder_reserved_percentage',
                                 'Cinder Reserved Space Percentage')
+        yield GaugeMetricFamily('cinder_percent_free',
+                                'Cinder Percentage of available space is free.')
 
     def calculate_capacity_factors(self,
                                    total_capacity: float,
@@ -231,6 +236,22 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         data['driver_version'] = caps['driver_version']
         return data
 
+    def _debug_gauge(self, gauge, name, value, shard, backend, pool):
+        LOG.debug(f"({shard}/{backend}/{pool})-{name} = {value}")
+        return gauge
+
+    def add_info_metric_gauge(self, name, description, value,
+                              shard, backend, pool):
+        gauge = InfoMetricFamily(name, description, labels=self.labels)
+        gauge.add_metric([backend, pool, shard], value=value)
+        return self._debug_gauge(gauge, name, value, shard, backend, pool)
+
+    def add_gauge_metric_gauge(self, name, description, value,
+                               shard, backend, pool):
+        gauge = GaugeMetricFamily(name, description, labels=self.labels)
+        gauge.add_metric([backend, pool, shard], value=value)
+        return self._debug_gauge(gauge, name, value, shard, backend, pool)
+
     def collect(self):
         # logic goes in here
         LOG.info("Collect cinder backend info. {}".format(
@@ -250,136 +271,103 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             caps = pool['capabilities']
             backend = caps['volume_backend_name']
             shard_name = caps['vcenter-shard']
-            LOG.debug("Got stats for pool {} ({}/{})".format(
-                self.region,
-                shard_name,
-                backend))
-
             volume_type = volume_types[backend]
             data = self._parse_pool_data(pool, volume_type)
             pool_name = data['pool']
+            LOG.debug(f"Got stats for {self.region} {shard_name}/{backend}/{pool_name}")
 
-            g = GaugeMetricFamily('cinder_per_volume_gigabytes',
-                                  'Cinder max volume size in GiB',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name],
-                         value=quota_obj.per_volume_gigabytes)
-            yield g
+            yield self.add_gauge_metric_gauge(
+                'cinder_per_volume_gigabytes',
+                'Cinder max volume size in GiB',
+                quota_obj.per_volume_gigabytes,
+                shard_name, backend, pool_name
+            )
+
+            yield self.add_info_metric_gauge(
+                'cinder_backend_state',
+                'State of cinder backend up/down',
+                {'backend_state': caps.get('backend_state', 'down')},
+                shard_name, backend, pool_name
+            )
+            yield self.add_info_metric_gauge(
+                'cinder_pool_state',
+                'State of cinder pool up/down',
+                {'pool_state': caps.get('pool_state', 'down')},
+                shard_name, backend, pool_name
+            )
 
             # The volume backend can do overcommit if and only if
             # the backdnd and volume type are set to thin provisioning.
             can_overcommit = data["can_overcommit"]
 
-            g = InfoMetricFamily('cinder_provisioning_type',
-                                 'Cinder provisioning type',
-                                 labels=['backend', 'pool', 'shard'])
             provisioning_type = ('thin' if can_overcommit else 'thick')
-            g.add_metric([backend, pool_name, shard_name],
-                         value={'provisioning_type': provisioning_type})
-            yield g
+            yield self.add_info_metric_gauge(
+                'cinder_provisioning_type',
+                'Cinder provisioning type',
+                {'provisioning_type': provisioning_type},
+                shard_name, backend, pool_name
+            )
 
-            total_capacity_gb = data.get('total_capacity_gb')
-            g = GaugeMetricFamily('cinder_total_capacity_gib',
-                                  'Cinder total capacity in GiB',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name],
-                         value=total_capacity_gb)
-            yield g
+            yield self.add_gauge_metric_gauge(
+                'cinder_total_capacity_gib',
+                'Cinder total capacity in GiB',
+                data['total_capacity_gb'],
+                shard_name, backend, pool_name
+            )
 
-            available_capacity_gb = data.get('available_capacity_gb')
-            g = GaugeMetricFamily('cinder_available_capacity_gib',
-                                  'Cinder available capacity in GiB',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name],
-                         value=available_capacity_gb)
-            yield g
+            yield self.add_gauge_metric_gauge(
+                'cinder_available_capacity_gib',
+                'Cinder available capacity in GiB',
+                data['available_capacity_gb'],
+                shard_name, backend, pool_name
+            )
 
-            free_cap = data['free_capacity_gb']
-            g = GaugeMetricFamily('cinder_free_capacity_gib',
-                                  'Cinder reported free capacity in GiB',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name], value=free_cap)
-            yield g
+            yield self.add_gauge_metric_gauge(
+                'cinder_free_capacity_gib',
+                'Cinder reported free capacity in GiB',
+                data['free_capacity_gb'],
+                shard_name, backend, pool_name
+            )
 
-            virtual_free_cap = data['virtual_free_capacity_gb']
-            g = GaugeMetricFamily('cinder_virtual_free_capacity_gib',
-                                  'Cinder virtual free capacity in GiB',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name],
-                         value=virtual_free_cap)
-            yield g
+            yield self.add_gauge_metric_gauge(
+                'cinder_virtual_free_capacity_gib',
+                'Cinder virtual free capacity in GiB',
+                data['virtual_free_capacity_gb'],
+                shard_name, backend, pool_name
+            )
 
-            g = GaugeMetricFamily('cinder_allocated_capacity_gib',
-                                  'Cinder allocated capacity in GiB',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name],
-                         value=data['allocated_capacity_gb'])
-            yield g
-
-            if can_overcommit:
-                g = GaugeMetricFamily('cinder_max_oversubscription_ratio',
-                                      'Cinder max overcommit ratio',
-                                      labels=['backend', 'pool', 'shard'])
-                g.add_metric([backend, pool_name, shard_name],
-                             value=data['max_over_subscription_ratio'])
-                yield g
-
-                g = GaugeMetricFamily('cinder_overcommit_ratio',
-                                      'Cinder Overcommit ratio',
-                                      labels=['backend', 'pool', 'shard'])
-                g.add_metric([backend, pool_name, shard_name],
-                             value=data['overcommit_ratio'])
-                yield g
-
-            g = GaugeMetricFamily('cinder_reserved_precentage',
-                                  'Cinder Reserved Space Percentage',
-                                  labels=['backend', 'pool', 'shard'])
-            g.add_metric([backend, pool_name, shard_name],
-                         value=data['reserved_percentage'])
-
-            yield g
-
-            LOG.debug('({}/{}/{})-per_volume_gigabytes = {}'.format(
-                shard_name, data['backend'], data['pool'],
-                quota_obj.per_volume_gigabytes
-            ))
-
-            LOG.debug('({}/{}/{})-provisioning_type = {}'.format(
-                shard_name, data['backend'], data['pool'],
-                provisioning_type
-            ))
-            LOG.debug('({}/{}/{})-total_capacity_gb = {}'.format(
-                shard_name, data['backend'], data['pool'],
-                data['total_capacity_gb']
-            ))
-            LOG.debug('({}/{}/{})-available_capacity_gb = {}'.format(
-                shard_name, data['backend'], data['pool'],
-                data['available_capacity_gb']
-            ))
-            LOG.debug('({}/{}/{})-free_capacity_gb = {}'.format(
-                shard_name, data['backend'], data['pool'],
-                data['free_capacity_gb']
-            ))
-            LOG.debug('({}/{}/{})-virtual_free_capacity_gb = {}'.format(
-                shard_name, data['backend'], data['pool'],
-                data['virtual_free_capacity_gb']
-            ))
-            LOG.debug('({}/{}/{})-allocated_capacity_gb = {}'.format(
-                shard_name, caps['volume_backend_name'], data['pool'],
-                data['allocated_capacity_gb']
-            ))
+            yield self.add_gauge_metric_gauge(
+                'cinder_allocated_capacity_gib',
+                'Cinder allocated capacity in GiB',
+                data['allocated_capacity_gb'],
+                shard_name, backend, pool_name
+            )
 
             if can_overcommit:
-                LOG.debug('({}/{}/{})-max_over_subscription_ratio = {}'.format(
-                    shard_name, caps['volume_backend_name'], data['pool'],
-                    caps['max_over_subscription_ratio']
-                ))
-                LOG.debug('({}/{}/{})-overcommit_ratio = {}'.format(
-                    shard_name, caps['volume_backend_name'], data['pool'],
-                    data['overcommit_ratio']
-                ))
+                yield self.add_gauge_metric_gauge(
+                    'cinder_max_oversubscription_ratio',
+                    'Cinder max overcommit ratio',
+                    data['max_over_subscription_ratio'],
+                    shard_name, backend, pool_name
+                )
 
-            LOG.debug('({}/{}/{})-reserved_percentage = {}'.format(
-                shard_name, caps['volume_backend_name'], data['pool'],
-                data['reserved_percentage']
-            ))
+                yield self.add_gauge_metric_gauge(
+                    'cinder_overcommit_ratio',
+                    'Cinder Overcommit ratio',
+                    data['overcommit_ratio'],
+                    shard_name, backend, pool_name
+                )
+
+            yield self.add_gauge_metric_gauge(
+                'cinder_reserved_percentage',
+                'Cinder Reserved Space Percentage',
+                data['reserved_percentage'],
+                shard_name, backend, pool_name
+            )
+
+            yield self.add_gauge_metric_gauge(
+                'cinder_percent_free',
+                'Cinder Percentage of available space is free.',
+                data['percent_left'],
+                shard_name, backend, pool_name
+            )
