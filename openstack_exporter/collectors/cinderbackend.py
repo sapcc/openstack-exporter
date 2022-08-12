@@ -371,3 +371,12 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 data['percent_left'],
                 shard_name, backend, pool_name
             )
+
+            netapp_fqdn = caps.get('custom_attributes', {}).get(
+                'netapp_fqdn', 'None')
+            yield self.add_info_metric_gauge(
+                'cinder_pool_netapp_fqdn',
+                'Cinder pool custom attribute netapp_fqdn',
+                {'netapp_fqdn': netapp_fqdn},
+                shard_name, backend, pool_name
+            )
