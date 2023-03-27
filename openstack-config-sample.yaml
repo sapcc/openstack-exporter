@@ -14,6 +14,15 @@ collectors:
   cinderbackend:
     collector: openstack_exporter.collectors.cinderbackend.CinderBackendCollector
     enabled: True
+    # The expected backends that support sharding
+    # The exporter will report stats for each sharding backend
+    # If there are no pools currently seen for that backend then the backend is down
+    expected_sharding_backends: vmware, standard_hdd
+    # The expected backends that don't support sharding that we always
+    # want to report.  If there are no pools found then that backend is down.
+    # expected_no_sharding_backends: backendA, backendB
+    # Allow reporting on unexpected backends discovered from stats
+    allow_unexpected_backends: False
   novabackend:
     collector: openstack_exporter.collectors.novaservice.NovaServiceCollector
     enabled: True

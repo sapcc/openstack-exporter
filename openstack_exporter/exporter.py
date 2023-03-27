@@ -58,7 +58,8 @@ def load_and_register_collectors(collector_config, openstack_config):
         cfg = collector_config[collector]
         if cfg['enabled']:
             LOG.info("Loading collector '{}'".format(cfg['collector']))
-            cls = factory(cfg['collector'], openstack_config=openstack_config)
+            cls = factory(cfg['collector'], openstack_config=openstack_config,
+                          collector_config=collector_config)
             REGISTRY.register(cls)
 
 
