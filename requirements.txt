@@ -8,3 +8,4 @@ pyyaml
 master_password
 openstacksdk
 python-cinderclient
+cachetools

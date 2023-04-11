@@ -26,8 +26,9 @@ openstack.enable_logging(debug=False, http_debug=False, stream=sys.stdout)
 
 class BaseCollector(ABC):
 
-    def __init__(self, openstack_config):
+    def __init__(self, openstack_config, collector_config):
         self.config = openstack_config
+        self.collector_config = collector_config
         self.region = self.config['region']
         self.client = self._connect()
 
