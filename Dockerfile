@@ -8,6 +8,7 @@ RUN git config --global http.sslVerify false
 RUN git clone https://github.com/sapcc/openstack-exporter.git
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools_rust
+RUN pip3 install python-manilaclient
 
 ADD . openstack-exporter/
 RUN cd openstack-exporter && pip3 install .
