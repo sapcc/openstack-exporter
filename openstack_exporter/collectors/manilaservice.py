@@ -82,7 +82,7 @@ class ManilaServiceCollector(BaseCollector.BaseCollector):
                                      labels=['service', 'host', 'zone'])
         g_state = GaugeMetricFamily('manila_service_state',
                                     'State of the running Manila service',
-                                    labels=['service', 'host', 'zone'])
+                                     labels=['service', 'host', 'zone'])
 
         for service in services:
             LOG.debug(f"Service: {service.binary}, Host: {service.host}, "
@@ -91,7 +91,7 @@ class ManilaServiceCollector(BaseCollector.BaseCollector):
             g_status.add_metric([service.binary, service.host, service.zone],
                                 1 if service.status == 'enabled' else 0)
             g_state.add_metric([service.binary, service.host, service.zone],
-                               1 if service.state == 'up' else 0)
+                                1 if service.state == 'up' else 0)
 
         yield g_status
         yield g_state
