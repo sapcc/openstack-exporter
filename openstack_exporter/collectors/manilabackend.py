@@ -39,7 +39,6 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         os_username = self.config['username']
         os_password = self.config['password']
         os_project_name = self.config['project_name']
-        api_version = '2.65'  # Adjust the API version as needed
         os_project_domain_name = self.config['project_domain_name']
         os_user_domain_name = self.config['user_domain_name']
         
@@ -53,11 +52,11 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         sess = session.Session(auth=auth)
         
         return manila.Client(
-            '2.65',
+            '2.65', # Adjust the API version as needed
             session=sess,
             region_name=self.region,
             service_type="sharev2",
-            endpoint_type="publicURL"
+            endpoint_type="internalURL"
         )
 
     def _renew_manila_client(self):
