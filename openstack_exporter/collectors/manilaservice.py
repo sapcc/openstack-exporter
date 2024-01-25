@@ -48,7 +48,7 @@ class ManilaServiceCollector(BaseCollector.BaseCollector):
                            user_domain_name=os_user_domain_name)
         
         sess = session.Session(auth=auth)
-        return manila.Client('2.65', session=sess, region_name=self.region)
+        return manila.Client('2.65', session=sess, region_name=self.region) # Adjust the API version as needed
 
     def _renew_manila_client(self):
         """Renew the Manila client."""
