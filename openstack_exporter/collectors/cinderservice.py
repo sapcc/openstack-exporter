@@ -22,7 +22,6 @@ from openstack_exporter import BaseCollector
 LOG = logging.getLogger('openstack_exporter.exporter')
 
 class CinderServiceCollector(BaseCollector.BaseCollector):
-    version = "1.0.0"
 
     def __init__(self, openstack_config, collector_config):
         super().__init__(openstack_config, collector_config)
