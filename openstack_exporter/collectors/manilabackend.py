@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.DEBUG)
 LOG = logging.getLogger('openstack_exporter.exporter')
 
 class ManilaBackendCollector(BaseCollector.BaseCollector):
-    version = "1.0.0"
+    version = "1.0.1"
 
     def __init__(self, openstack_config, collector_config):
         super().__init__(openstack_config, collector_config)
@@ -41,16 +41,16 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         os_project_name = self.config['project_name']
         os_project_domain_name = self.config['project_domain_name']
         os_user_domain_name = self.config['user_domain_name']
-        
+
         auth = v3.Password(auth_url=os_auth_url,
                            username=os_username,
                            password=os_password,
                            project_name=os_project_name,
                            project_domain_name=os_project_domain_name,
                            user_domain_name=os_user_domain_name)
-        
+
         sess = session.Session(auth=auth)
-        
+
         return manila.Client(
             '2.65', # Adjust the API version as needed
             session=sess,
@@ -67,52 +67,57 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
     def describe(self):
         # Define metrics for description
         label_names = [
-            'name', 'pool_name', 'share_backend_name', 
+            'name', 'pool_name', 'host', 'share_backend_name',
             'driver_version', 'hardware_state'
         ]
-        
+
         yield GaugeMetricFamily(
-            'manila_total_capacity_gb', 
-            'Total capacity of the Manila backend in GiB', 
+            'manila_total_capacity_gb',
+            'Total capacity of the Manila backend in GiB',
             labels=label_names
         )
         yield GaugeMetricFamily(
-            'manila_free_capacity_gb', 
-            'Free capacity of the Manila backend in GiB', 
+            'manila_free_capacity_gb',
+            'Free capacity of the Manila backend in GiB',
             labels=label_names
         )
         yield GaugeMetricFamily(
-            'manila_allocated_capacity_gb', 
-            'Allocated capacity of the Manila backend in GiB', 
+            'manila_allocated_capacity_gb',
+            'Allocated capacity of the Manila backend in GiB',
             labels=label_names
         )
         yield GaugeMetricFamily(
-            'manila_reserved_percentage', 
-            'Reserved percentage of the Manila backend', 
+            'manila_reserved_percentage',
+            'Reserved percentage of the Manila backend',
             labels=label_names
         )
         yield GaugeMetricFamily(
-            'manila_reserved_snapshot_percentage', 
-            'Reserved snapshot percentage of the Manila backend', 
+            'manila_reserved_snapshot_percentage',
+            'Reserved snapshot percentage of the Manila backend',
             labels=label_names
         )
         yield GaugeMetricFamily(
-            'manila_reserved_share_extend_percentage', 
-            'Reserved share extend percentage of the Manila backend', 
+            'manila_reserved_share_extend_percentage',
+            'Reserved share extend percentage of the Manila backend',
             labels=label_names
         )
         yield GaugeMetricFamily(
-            'manila_max_over_subscription_ratio', 
-            'Max over-subscription ratio of the Manila backend', 
+            'manila_max_over_subscription_ratio',
+            'Max over-subscription ratio of the Manila backend',
             labels=label_names
         )
 
     def _parse_pool_data(self, pool):
         # Parse pool data to extract metrics
         capabilities = pool.get('capabilities', {})
+        host = pool.get('host', 'N/A')
+        backend = pool.get('backend', 'N/A')
+        # host in the format of manila service
+        returned_host = f"{host}@{backend}"
         return {
             "name": pool.get('name', 'N/A'),
             "pool_name": capabilities.get('pool_name', 'N/A'),
+            "host": returned_host,
             "total_capacity_gb": capabilities.get('total_capacity_gb', 0),
             "free_capacity_gb": capabilities.get('free_capacity_gb', 0),
             "allocated_capacity_gb": capabilities.get('allocated_capacity_gb', 0),
@@ -130,20 +135,20 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
 
     def _create_gauge_metric(self, name, description, value, labels):
         metric = GaugeMetricFamily(
-            name, description, 
+            name, description,
             labels=[
-                'name', 'pool_name', 'share_backend_name', 
+                'name', 'pool_name', 'host', 'share_backend_name',
                 'driver_version', 'hardware_state'
             ]
         )
         metric.add_metric(labels, value)
         return metric
-            
-    def collect(self): 
+
+    def collect(self):
         LOG.info("Collect Manila backend info. {}".format(
             self.config['auth_url']
         ))
-        
+
         try:
             pools = self.manila_client.pools.list(detailed=True)
 
@@ -159,10 +164,11 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         for pool in pools:
             data = self._parse_pool_data(pool._info)
             LOG.debug(f"Pool data: {data}")
-            
+
             labels = [
                 data['name'],
                 data['pool_name'],
+                data['host'],
                 data['share_backend_name'],
                 data['driver_version'],
                 data['hardware_state']
