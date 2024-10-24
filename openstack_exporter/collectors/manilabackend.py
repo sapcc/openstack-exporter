@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.DEBUG)
 LOG = logging.getLogger('openstack_exporter.exporter')
 
 class ManilaBackendCollector(BaseCollector.BaseCollector):
-    version = "1.0.1"
+    version = "1.0.2"
 
     def __init__(self, openstack_config, collector_config):
         super().__init__(openstack_config, collector_config)
@@ -68,7 +68,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         # Define metrics for description
         label_names = [
             'name', 'pool_name', 'host', 'share_backend_name',
-            'driver_version', 'hardware_state'
+            'share_backend_fqdn', 'driver_version', 'hardware_state'
         ]
 
         yield GaugeMetricFamily(
@@ -130,6 +130,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
                 'max_over_subscription_ratio', 1),
             "hardware_state": capabilities.get('hardware_state', 'N/A'),
             "share_backend_name": capabilities.get('share_backend_name', 'N/A'),
+            "share_backend_fqdn": capabilities.get('share_backend_host', 'N/A'),
             "driver_version": str(capabilities.get('driver_version', 'N/A'))
         }
 
@@ -138,7 +139,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
             name, description,
             labels=[
                 'name', 'pool_name', 'host', 'share_backend_name',
-                'driver_version', 'hardware_state'
+                'share_backend_fqdn', 'driver_version', 'hardware_state'
             ]
         )
         metric.add_metric(labels, value)
@@ -170,6 +171,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
                 data['pool_name'],
                 data['host'],
                 data['share_backend_name'],
+                data['share_backend_fqdn'],
                 data['driver_version'],
                 data['hardware_state']
             ]
