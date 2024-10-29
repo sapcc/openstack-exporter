@@ -7,6 +7,7 @@ requests
 pyyaml
 master_password
 openstacksdk
+cryptography<43.0.0
 python-cinderclient
 python-manilaclient
 cachetools
