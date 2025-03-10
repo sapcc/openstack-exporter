@@ -88,9 +88,11 @@ def get_config(config_file):
               help="specify exporter serving port")
 @click.option("-c", "--config", metavar="<config>",
               help="path to rest config")
+@click.option("--secrets", metavar="<secrets>",
+              help="path to YAML containing openstack password and optional username")
 @click.version_option()
 @click.help_option()
-def main(port, config):
+def main(port, config, secrets):
     if not config:
         raise click.ClickException("Missing OpenStack config yaml --config")
 
@@ -98,6 +100,14 @@ def main(port, config):
     exporter_config = config_obj['exporter']
     os_config = config_obj['openstack']
     collector_config = config_obj['collectors']
+
+    if secrets:
+        secrets_obj = get_config(secrets)
+        os_config.update(secrets_obj['openstack'])
+
+    if 'username' not in os_config or 'password' not in os_config:
+        raise click.ClickException("OpenStack username and/or password are unset. "
+                                   "Please provide them via --secrets config file")
 
     if exporter_config['log_level']:
         LOG.setLevel(logging.getLevelName(
