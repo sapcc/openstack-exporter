@@ -398,17 +398,26 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 else:
                     LOG.debug(f"Got stats for {self.region} {backend}/{pool_name}")
 
-                yield from self._report_stats(
-                    shard_name, backend, data, caps, quota_obj)
+                # Are we allowed to report this backend?
+                report = False
                 if backend in seen_backends[shard_name]:
                     seen_backends[shard_name][backend] += 1
+                    report = True
                 elif self.allow_unexpected_backends:
                     LOG.debug(f"Adding unexpected backend {backend} "
                             f"to shard {shard_name}")
                     seen_backends[shard_name][backend] = 1
+                    report = True
                 else:
                     LOG.warning(f"Backend {backend} is not in expected "
                                 f"backends {self.expected_sharding_backends}")
+
+                if report:
+                    yield from self._report_stats(
+                        shard_name, backend, data, caps, quota_obj)
+                else:
+                    LOG.warning(f"Not reporting stats for {self.region} "
+                     f"{shard_name}/{backend}/{pool_name}")
 
         LOG.debug(f"seen backends {seen_backends}")
         for shard in seen_backends:
