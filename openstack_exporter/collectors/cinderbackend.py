@@ -178,6 +178,14 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             shard_name, backend, pool_name
         )
 
+        az = caps.get('backend_availability_zone', 'unknown')
+        yield self.add_info_metric_gauge(
+            'cinder_backend_availability_zone',
+            'Cinder backend availability zone',
+            {'availability_zone': az},
+            shard_name, backend, pool_name
+        )
+
         # The volume backend can do overcommit if and only if
         # the backdnd and volume type are set to thin provisioning.
         can_overcommit = data["can_overcommit"]
