@@ -38,7 +38,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         # because the openstacksdk doesn't currently
         # Support the quota functions.
         self.cinder_client = self._cinder_client()
-        self.labels = ['backend', 'pool', 'shard']
+        self.labels = ['backend', 'pool', 'shard', 'availability_zone']
+        self.aggregate_labels = ['backend', 'pool', 'shard']
         LOG.debug(f"Openstack Exporter CinderBackend Version {self.version}")
         LOG.debug(f"Collector configuration {self.collector_config}")
         # Make sure there is a default setting for valid_backends
@@ -132,19 +133,28 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         return gauge
 
     def add_info_metric_gauge(self, name, description, value,
-                              shard, backend, pool):
-        gauge = InfoMetricFamily(name, description, labels=self.labels)
-        gauge.add_metric([backend, pool, shard], value=value)
+                              shard, backend, pool, availability_zone=None):
+        if availability_zone is not None:
+            gauge = InfoMetricFamily(name, description, labels=self.labels)
+            gauge.add_metric([backend, pool, shard, availability_zone], value=value)
+        else:
+            gauge = InfoMetricFamily(name, description, labels=self.aggregate_labels)
+            gauge.add_metric([backend, pool, shard], value=value)
         return self._debug_gauge(gauge, name, value, shard, backend, pool)
 
     def add_gauge_metric_gauge(self, name, description, value,
-                               shard, backend, pool):
-        gauge = GaugeMetricFamily(name, description, labels=self.labels)
-        gauge.add_metric([backend, pool, shard], value=value)
+                               shard, backend, pool, availability_zone=None):
+        if availability_zone is not None:
+            gauge = GaugeMetricFamily(name, description, labels=self.labels)
+            gauge.add_metric([backend, pool, shard, availability_zone], value=value)
+        else:
+            gauge = GaugeMetricFamily(name, description, labels=self.aggregate_labels)
+            gauge.add_metric([backend, pool, shard], value=value)
         return self._debug_gauge(gauge, name, value, shard, backend, pool)
 
     def _report_stats(self, shard_name, backend, data, caps, quota_obj):
         pool_name = data['pool']
+        az = caps.get('backend_availability_zone', 'unknown')
         LOG.debug(f"Reporting stats for {shard_name}/{backend}/{pool_name}")
         LOG.debug(f"Data {data}")
         LOG.debug(f"Capabilities {caps}")
@@ -152,19 +162,19 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             'cinder_per_volume_gigabytes',
             'Cinder max volume size in GiB',
             quota_obj.per_volume_gigabytes,
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
         yield self.add_info_metric_gauge(
             'cinder_backend_state',
             'State of cinder backend up/down',
             {'backend_state': caps.get('backend_state', 'down')},
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
         yield self.add_info_metric_gauge(
             'cinder_pool_state',
             'State of cinder pool up/down',
             {'pool_state': caps.get('pool_state', 'down')},
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
         down_reason = caps.get('pool_down_reason', 'unknown')
         if caps.get('backend_state', 'down') == 'down':
@@ -175,15 +185,14 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             'cinder_pool_down_reason',
             'Reason for pool state being down',
             {'pool_down_reason': down_reason},
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
-        az = caps.get('backend_availability_zone', 'unknown')
         yield self.add_info_metric_gauge(
             'cinder_backend_availability_zone',
             'Cinder backend availability zone',
             {'availability_zone': az},
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         # The volume backend can do overcommit if and only if
@@ -195,42 +204,42 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             'cinder_provisioning_type',
             'Cinder provisioning type',
             {'provisioning_type': provisioning_type},
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         yield self.add_gauge_metric_gauge(
             'cinder_total_capacity_gib',
             'Cinder total capacity in GiB',
             data['total_capacity_gb'],
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         yield self.add_gauge_metric_gauge(
             'cinder_available_capacity_gib',
             'Cinder available capacity in GiB',
             data['available_capacity_gb'],
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         yield self.add_gauge_metric_gauge(
             'cinder_free_capacity_gib',
             'Cinder reported free capacity in GiB',
             data['free_capacity_gb'],
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         yield self.add_gauge_metric_gauge(
             'cinder_virtual_free_capacity_gib',
             'Cinder virtual free capacity in GiB',
             data['virtual_free_capacity_gb'],
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         yield self.add_gauge_metric_gauge(
             'cinder_allocated_capacity_gib',
             'Cinder allocated capacity in GiB',
             data['allocated_capacity_gb'],
-            shard_name, backend, pool_name
+            shard_name, backend, pool_name, az
         )
 
         aggregate_id = data.get("aggregate_id")
@@ -239,7 +248,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 'cinder_aggregate_id',
                 'Cinder aggregate id',
                 {'aggregate_id': aggregate_id},
-                shard_name, backend, pool_name
+                shard_name, backend, pool_name, az
             )
 
         if can_overcommit:
@@ -247,27 +256,27 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 'cinder_max_oversubscription_ratio',
                 'Cinder max overcommit ratio',
                 data['max_over_subscription_ratio'],
-                shard_name, backend, pool_name
+                shard_name, backend, pool_name, az
             )
 
             yield self.add_gauge_metric_gauge(
                 'cinder_overcommit_ratio',
                 'Cinder Overcommit ratio',
                 data['overcommit_ratio'],
-                shard_name, backend, pool_name
+                shard_name, backend, pool_name, az
             )
             yield self.add_gauge_metric_gauge(
                 'cinder_reserved_percentage',
                 'Cinder Reserved Space Percentage',
                 data['reserved_percentage'],
-                shard_name, backend, pool_name
+                shard_name, backend, pool_name, az
             )
 
             yield self.add_gauge_metric_gauge(
                 'cinder_percent_free',
                 'Cinder Percentage of available space is free.',
                 data['percent_left'],
-                shard_name, backend, pool_name
+                shard_name, backend, pool_name, az
             )
 
             netapp_fqdn = caps.get('custom_attributes', {}).get(
@@ -276,7 +285,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 'cinder_pool_netapp_fqdn',
                 'Cinder pool custom attribute netapp_fqdn',
                 {'netapp_fqdn': netapp_fqdn},
-                shard_name, backend, pool_name
+                shard_name, backend, pool_name, az
             )
 
     def _report_aggregated_stats(self, backend):
@@ -435,7 +444,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                     yield self.add_gauge_metric_gauge(
                         'cinder_free_capacity_gib',
                         'Cinder reported free capacity in GiB',
-                        0, shard, backend, "None"
+                        0, shard, backend, "None", "unknown"
                     )
 
         for pool_name in aggregated_pools:
