@@ -57,6 +57,12 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
 
         self.allow_unexpected_backends = cinder_config.get(
             'allow_unexpected_backends', ALLOW_UNEXPECTED_BACKENDS_DEFAULT)
+        # Create a combined set of all explicitly expected backends for quick lookup
+        # This is used to determine if a backend should have "down" metrics emitted
+        self.expected_backends_set = (
+            set(self.expected_sharding_backends) |
+            set(self.expected_no_sharding_backends)
+        )
         LOG.debug("Allowed Expected Sharding Backends "
                   f"{self.expected_sharding_backends}")
         LOG.debug("Allowed Expected Non Sharding Backends "
@@ -440,12 +446,20 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         for shard in seen_backends:
             for backend in seen_backends[shard]:
                 if seen_backends[shard][backend] == 0:
-                    LOG.debug(f"{shard} / {backend} is down")
-                    yield self.add_gauge_metric_gauge(
-                        'cinder_free_capacity_gib',
-                        'Cinder reported free capacity in GiB',
-                        0, shard, backend, "None", "unknown"
-                    )
+                    # Only emit "down" metrics for explicitly expected backends,
+                    # not for backends discovered via allow_unexpected_backends
+                    if backend in self.expected_backends_set:
+                        LOG.warning(f"{shard} / {backend} is down - no pools reporting")
+                        yield self.add_gauge_metric_gauge(
+                            'cinder_free_capacity_gib',
+                            'Cinder reported free capacity in GiB',
+                            0, shard, backend, "backend_down", "unknown"
+                        )
+                    else:
+                        LOG.debug(
+                            f"{shard} / {backend} has count 0 but is not an "
+                            "expected backend - skipping down metric"
+                        )
 
         for pool_name in aggregated_pools:
             yield from self._report_aggregated_stats(
