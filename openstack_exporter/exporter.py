@@ -24,6 +24,7 @@ from prometheus_client import start_http_server
 import yaml
 
 import openstack_exporter
+from openstack_exporter.caching_collector import CachingCollector
 
 
 LOG = logging.getLogger(__name__)
@@ -38,15 +39,16 @@ def factory(module_class_string, super_cls: type = None, **kwargs):
     """
     module_name, class_name = module_class_string.rsplit(".", 1)
     module = importlib.import_module(module_name)
-    assert hasattr(module, class_name), (
-        "class {} is not in {}".format(class_name, module_name))
+    assert hasattr(module, class_name), "class {} is not in {}".format(
+        class_name, module_name
+    )
     # click.echo('reading class {} from module {}'.format(
     #     class_name, module_name))
     cls = getattr(module, class_name)
     if super_cls is not None:
-        assert issubclass(cls, super_cls), (
-            "class {} should inherit from {}".format(
-                class_name, super_cls.__name__))
+        assert issubclass(cls, super_cls), "class {} should inherit from {}".format(
+            class_name, super_cls.__name__
+        )
     # click.echo('initialising {} with params {}'.format(class_name, kwargs))
     obj = cls(**kwargs)
     return obj
@@ -56,11 +58,30 @@ def load_and_register_collectors(collector_config, openstack_config):
     """Load all enabled collectors from config."""
     for collector in collector_config:
         cfg = collector_config[collector]
-        if cfg['enabled']:
-            LOG.info("Loading collector '{}'".format(cfg['collector']))
-            cls = factory(cfg['collector'], openstack_config=openstack_config,
-                          collector_config=collector_config)
-            REGISTRY.register(cls)
+        if cfg["enabled"]:
+            LOG.info("Loading collector '{}'".format(cfg["collector"]))
+            collector_instance = factory(
+                cfg["collector"],
+                openstack_config=openstack_config,
+                collector_config=collector_config,
+            )
+
+            # Wrap with CachingCollector if refresh_interval is configured
+            refresh_interval = cfg.get("refresh_interval", 0)
+            if refresh_interval > 0:
+                serve_stale = cfg.get("serve_stale_on_error", True)
+                LOG.info(
+                    f"Wrapping {collector} with CachingCollector "
+                    f"(refresh_interval={refresh_interval}s, "
+                    f"serve_stale_on_error={serve_stale})"
+                )
+                collector_instance = CachingCollector(
+                    collector_instance,
+                    refresh_interval=refresh_interval,
+                    serve_stale_on_error=serve_stale,
+                )
+
+            REGISTRY.register(collector_instance)
 
 
 def run_prometheus_server(port, collector_config, openstack_config):
@@ -84,12 +105,15 @@ def get_config(config_file):
 
 
 @click.command()
-@click.option("--port", metavar="<port>", default=9102,
-              help="specify exporter serving port")
-@click.option("-c", "--config", metavar="<config>",
-              help="path to rest config")
-@click.option("--secrets", metavar="<secrets>",
-              help="path to YAML containing openstack password and optional username")
+@click.option(
+    "--port", metavar="<port>", default=9102, help="specify exporter serving port"
+)
+@click.option("-c", "--config", metavar="<config>", help="path to rest config")
+@click.option(
+    "--secrets",
+    metavar="<secrets>",
+    help="path to YAML containing openstack password and optional username",
+)
 @click.version_option()
 @click.help_option()
 def main(port, config, secrets):
@@ -97,35 +121,36 @@ def main(port, config, secrets):
         raise click.ClickException("Missing OpenStack config yaml --config")
 
     config_obj = get_config(config)
-    exporter_config = config_obj['exporter']
-    os_config = config_obj['openstack']
-    collector_config = config_obj['collectors']
+    exporter_config = config_obj["exporter"]
+    os_config = config_obj["openstack"]
+    collector_config = config_obj["collectors"]
 
     if secrets:
         secrets_obj = get_config(secrets)
-        os_config.update(secrets_obj['openstack'])
+        os_config.update(secrets_obj["openstack"])
 
-    if 'username' not in os_config or 'password' not in os_config:
-        raise click.ClickException("OpenStack username and/or password are unset. "
-                                   "Please provide them via --secrets config file")
+    if "username" not in os_config or "password" not in os_config:
+        raise click.ClickException(
+            "OpenStack username and/or password are unset. "
+            "Please provide them via --secrets config file"
+        )
 
-    if exporter_config['log_level']:
-        LOG.setLevel(logging.getLevelName(
-            exporter_config['log_level'].upper()))
+    if exporter_config["log_level"]:
+        log_level = logging.getLevelName(exporter_config["log_level"].upper())
     else:
-        LOG.setLevel(logging.getLevelName("INFO"))
+        log_level = logging.getLevelName("INFO")
 
-    format = '[%(asctime)s] [%(levelname)s] %(message)s'
-    logging.basicConfig(stream=sys.stdout, format=format)
+    format = "[%(asctime)s] [%(levelname)s] %(message)s"
+    logging.basicConfig(stream=sys.stdout, format=format, level=log_level)
 
-    LOG.info("Starting OpenStack Exporter {} on port={} config={}".format(
-        openstack_exporter.version_string(),
-        port,
-        config
-    ))
+    LOG.info(
+        "Starting OpenStack Exporter {} on port={} config={}".format(
+            openstack_exporter.version_string(), port, config
+        )
+    )
 
     run_prometheus_server(port, collector_config, os_config)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
