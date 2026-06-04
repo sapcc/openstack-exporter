@@ -346,8 +346,9 @@ def aggregate_pools(pools):
                         'aggregate_id': caps['aggregate_id'],
                         'virtual_free_capacity_gb': virtual_free,
                     }
-                    if 'netapp_fqdn' in caps['custom_attributes']:
-                        agg_pools[pool_name]['netapp_fqdn'] = caps['custom_attributes']['netapp_fqdn']
+                    custom_attrs = caps.get('custom_attributes', {})
+                    if 'netapp_fqdn' in custom_attrs:
+                        agg_pools[pool_name]['netapp_fqdn'] = custom_attrs['netapp_fqdn']
                     else:
                         agg_pools[pool_name]['netapp_fqdn'] = "N/A"
 
