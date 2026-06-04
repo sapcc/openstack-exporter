@@ -182,7 +182,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             {'pool_state': caps.get('pool_state', 'down')},
             shard_name, backend, pool_name, az
         )
-        down_reason = caps.get('pool_down_reason', 'unknown')
+        down_reason = caps.get('pool_down_reason') or 'unknown'
         if caps.get('backend_state', 'down') == 'down':
             down_reason = 'backend_down'
         elif 'Datastore marked as draining' in down_reason:
