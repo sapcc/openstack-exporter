@@ -26,7 +26,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r test-requirements.txt
-          python -m pip install --force-reinstall 'importlib-metadata==4.13.0'
+          # hacking 3.1 pins flake8 3.8, which cannot run on Python 3.12.
+          python -m pip install --no-deps \
+            'flake8==5.0.4' \
+            'pycodestyle==2.9.1' \
+            'pyflakes==2.5.0' \
+            'mccabe==0.7.0'
       - name: Run flake8
         run: flake8 .
 
