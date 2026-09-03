@@ -1,3 +1,16 @@
+# All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
 
 import logging
 import math
@@ -111,7 +124,7 @@ def calculate_capacity_factors(total_capacity: float,
 
     if thin and thin_provisioning_support:
         total_available_capacity = (
-                total_reserved_available * max_over_subscription_ratio
+            total_reserved_available * max_over_subscription_ratio
         )
         calculated_free = total_available_capacity - provisioned_capacity
         virtual_free = calculated_free
@@ -140,7 +153,7 @@ def calculate_capacity_factors(total_capacity: float,
         "reserved_capacity": reserved_capacity,
         "total_reserved_available_capacity": int(total_reserved_available),
         "max_over_subscription_ratio": (
-                max_over_subscription_ratio if provisioned_type == 'thin' else None
+            max_over_subscription_ratio if provisioned_type == 'thin' else None
         ),
         "total_available_capacity": int(total_available_capacity),
         "provisioned_capacity": provisioned_capacity,
@@ -262,7 +275,7 @@ def extract_shard_from_host(host):
 
 def filter_pools(client, pools):
     """Run the capabilities filter on the pools.
-    
+
     This is used to assign pools to a volume type.
 
     This uses the same capabilities filter as the cinder scheduler
@@ -312,7 +325,7 @@ def aggregate_pools(pools):
         if total_available_capacity == 0:
             return 0
         return math.floor((virtual_free / total_available_capacity) * 100)
-    
+
     def calc_available_capacity(total_capacity, reserved_percentage):
         reserved = float(reserved_percentage) / 100
         reserved_capacity = math.floor(total_capacity * reserved)
@@ -321,7 +334,7 @@ def aggregate_pools(pools):
     agg_pools = {}
     for shard in pools:
         for pool in pools[shard]:
-            if  "aggregate_id" in pool['capabilities']:
+            if "aggregate_id" in pool['capabilities']:
                 caps = pool['capabilities']
                 pool_name = extract_host(pool['name'], 'pool')
                 available_cap = calc_available_capacity(
@@ -343,7 +356,6 @@ def aggregate_pools(pools):
                         'reserved_percentage': caps['reserved_percentage'],
                         'max_over_subscription_ratio': caps['max_over_subscription_ratio'],
                         'thin_provisioning_support': caps['thin_provisioning_support'],
-                        'aggregate_id': caps['aggregate_id'],
                         'virtual_free_capacity_gb': virtual_free,
                     }
                     custom_attrs = caps.get('custom_attributes', {})
@@ -351,10 +363,8 @@ def aggregate_pools(pools):
                         agg_pools[pool_name]['netapp_fqdn'] = custom_attrs['netapp_fqdn']
                     else:
                         agg_pools[pool_name]['netapp_fqdn'] = "N/A"
-
                     agg_pools[pool_name]['free_percent'] = calc_free_percent(
                         virtual_free, available_cap
                     )
 
     return agg_pools
-
