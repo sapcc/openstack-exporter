@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r test-requirements.txt
+          # hacking 3.1 pins flake8 3.8, which cannot run on Python 3.12.
+          python -m pip install --no-deps \
+            'flake8==5.0.4' \
+            'pycodestyle==2.9.1' \
+            'pyflakes==2.5.0' \
+            'mccabe==0.7.0'
+      - name: Run flake8
+        run: flake8 .
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r test-requirements.txt
+      - name: Run unit tests
+        run: |
+          if [ -d openstack_exporter/tests ]; then
+            stestr run
+          else
+            echo "No OpenStack exporter tests are present on this revision."
+          fi
