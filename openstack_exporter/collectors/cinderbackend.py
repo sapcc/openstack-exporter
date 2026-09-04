@@ -12,8 +12,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+"""Collect Cinder backend metrics."""
+
 import logging
-import math
 from prometheus_client.core import GaugeMetricFamily, InfoMetricFamily
 
 from cachetools import cached, TTLCache
@@ -30,9 +31,12 @@ ALLOW_UNEXPECTED_BACKENDS_DEFAULT = False
 
 
 class CinderBackendCollector(BaseCollector.BaseCollector):
+    """Collect metrics for Cinder backends and pools."""
+
     version = "1.0.3"
 
     def __init__(self, openstack_config, collector_config):
+        """Initialize the Cinder backend collector."""
         super().__init__(openstack_config, collector_config)
         # We have to create a cinder client here
         # because the openstacksdk doesn't currently
@@ -71,7 +75,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         LOG.debug(f"Shards discovered: {self.shards()}")
 
     def _cinder_client(self):
-        """openstacksdk doesn't have quota functions yet."""
+        """Create a Cinder client for quota functions."""
         os_auth_url = self.config['auth_url']
         os_username = self.config['username']
         os_password = self.config['password']
@@ -103,6 +107,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
     # Cache the shards for 30 minutes since it's painful to fetch
     @cached(cache=TTLCache(maxsize=50, ttl=1800))
     def shards(self):
+        """Return the configured Cinder shard names."""
         shard_names = []
         LOG.debug("Fetching shard names")
         for agg in self.client.compute.aggregates():
@@ -111,6 +116,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         return shard_names
 
     def describe(self):
+        """Describe the metrics emitted by this collector."""
         yield GaugeMetricFamily('cinder_per_volume_gigabytes',
                                 'Cinder max volume size')
         yield InfoMetricFamily('cinder_provisioning_type',
@@ -140,6 +146,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
 
     def add_info_metric_gauge(self, name, description, value,
                               shard, backend, pool, availability_zone=None):
+        """Create an info metric for a Cinder backend or pool."""
         if availability_zone is not None:
             gauge = InfoMetricFamily(name, description, labels=self.labels)
             gauge.add_metric([backend, pool, shard, availability_zone], value=value)
@@ -150,6 +157,7 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
 
     def add_gauge_metric_gauge(self, name, description, value,
                                shard, backend, pool, availability_zone=None):
+        """Create a gauge metric for a Cinder backend or pool."""
         if availability_zone is not None:
             gauge = GaugeMetricFamily(name, description, labels=self.labels)
             gauge.add_metric([backend, pool, shard, availability_zone], value=value)
@@ -348,9 +356,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             'aggregate', 'aggregate', pool_name
         )
 
-
     def collect(self):
-        """This is the collector for cinder backends.
+        """Collect Cinder backend metrics.
 
         This calls the cinder scheduler api to get all the pool stats
         that the scheduler sees.  If a backend is down and the stats aren't
@@ -394,7 +401,6 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             seen_backends[shard_name] = default_shard_backends.copy()
         LOG.debug(f"Expecting backends {self.expected_sharding_backends}")
         LOG.debug(f"Initial stats {seen_backends}")
-        type_by_name = cinder_utils.get_volume_types_by_name(self.client)
         for volume_type_name in pools:
             for pool in pools[volume_type_name]:
                 caps = pool['capabilities']

@@ -24,7 +24,7 @@ import logging
 import threading
 import time
 
-from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily
+from prometheus_client.core import GaugeMetricFamily
 
 LOG = logging.getLogger("openstack_exporter.exporter")
 
@@ -141,7 +141,7 @@ class CachingCollector:
                 duration = time.time() - start
                 LOG.info(
                     f"[{self.name}] Collection completed: {len(metrics)} metrics "
-                    f"in {duration:.2f}s"
+                    "in {:.2f}s".format(duration)
                 )
 
                 # Update cache (protected by lock)

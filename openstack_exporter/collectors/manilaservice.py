@@ -12,14 +12,16 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import logging
-from prometheus_client.core import GaugeMetricFamily
-from keystoneauth1 import session
 from keystoneauth1.identity import v3
+from keystoneauth1 import session
+import logging
 from manilaclient import client as manila
 from openstack_exporter import BaseCollector
+from prometheus_client.core import GaugeMetricFamily
+
 
 LOG = logging.getLogger('openstack_exporter.exporter')
+
 
 class ManilaServiceCollector(BaseCollector.BaseCollector):
 
@@ -39,16 +41,15 @@ class ManilaServiceCollector(BaseCollector.BaseCollector):
         os_project_name = self.config['project_name']
         os_project_domain_name = self.config['project_domain_name']
         os_user_domain_name = self.config['user_domain_name']
-        
         auth = v3.Password(auth_url=os_auth_url,
                            username=os_username,
                            password=os_password,
                            project_name=os_project_name,
                            project_domain_name=os_project_domain_name,
                            user_domain_name=os_user_domain_name)
-        
         sess = session.Session(auth=auth)
-        return manila.Client('2.65', session=sess, region_name=self.region) # Adjust the API version as needed
+        # Adjust the API version as needed.
+        return manila.Client('2.65', session=sess, region_name=self.region)
 
     def _renew_manila_client(self):
         """Renew the Manila client."""
@@ -77,21 +78,25 @@ class ManilaServiceCollector(BaseCollector.BaseCollector):
                 LOG.error(f"Error while collecting Manila service metrics: {e}")
                 return
 
-        g_status = GaugeMetricFamily('manila_service_status',
-                                     'An admin has enabled or disabled the Manila service',
-                                     labels=['service', 'host', 'zone'])
-        g_state = GaugeMetricFamily('manila_service_state',
-                                    'State of the running Manila service',
-                                     labels=['service', 'host', 'zone'])
+        g_status = GaugeMetricFamily(
+            'manila_service_status',
+            'An admin has enabled or disabled the Manila service',
+            labels=['service', 'host', 'zone'])
+        g_state = GaugeMetricFamily(
+            'manila_service_state',
+            'State of the running Manila service',
+            labels=['service', 'host', 'zone'])
 
         for service in services:
             LOG.debug(f"Service: {service.binary}, Host: {service.host}, "
                       f"Zone: {service.zone}, Status: {service.status}, State: {service.state}")
 
-            g_status.add_metric([service.binary, service.host, service.zone],
-                                1 if service.status == 'enabled' else 0)
-            g_state.add_metric([service.binary, service.host, service.zone],
-                                1 if service.state == 'up' else 0)
+            g_status.add_metric(
+                [service.binary, service.host, service.zone],
+                1 if service.status == 'enabled' else 0)
+            g_state.add_metric(
+                [service.binary, service.host, service.zone],
+                1 if service.state == 'up' else 0)
 
         yield g_status
         yield g_state

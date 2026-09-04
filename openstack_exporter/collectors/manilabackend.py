@@ -12,15 +12,16 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import logging
-from keystoneauth1 import session
 from keystoneauth1.identity import v3
-from prometheus_client.core import GaugeMetricFamily
+from keystoneauth1 import session
+import logging
 from manilaclient import client as manila  # Ensure manilaclient is installed
 from openstack_exporter import BaseCollector
+from prometheus_client.core import GaugeMetricFamily
 
 logging.basicConfig(level=logging.DEBUG)
 LOG = logging.getLogger('openstack_exporter.exporter')
+
 
 class ManilaBackendCollector(BaseCollector.BaseCollector):
     version = "1.0.2"
@@ -52,7 +53,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         sess = session.Session(auth=auth)
 
         return manila.Client(
-            '2.65', # Adjust the API version as needed
+            '2.65',  # Adjust the API version as needed
             session=sess,
             region_name=self.region,
             service_type="sharev2",

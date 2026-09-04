@@ -13,13 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from openstack_exporter.utils.filters import extra_specs_ops
 from openstack_exporter.utils.filters import CinderSchedulerBaseFilter
+from openstack_exporter.utils.filters import extra_specs_ops
 
 
 class CapabilitiesFilter(CinderSchedulerBaseFilter):
     """BackendFilter to work with resource (instance & volume) type records."""
-    
+
     def _satisfies_extra_specs(self, capabilities, filter_properties):
         """Check if capabilities satisfy resource type requirements.
 
@@ -65,7 +65,9 @@ class CapabilitiesFilter(CinderSchedulerBaseFilter):
                 try:
                     cap = cap[scope[index]]
                 except (TypeError, KeyError):
-                    #self.console.print("Backend doesn't provide capability '%(cap)s' ", {'cap': scope[index]})
+                    # self.console.print(
+                    #     "Backend doesn't provide capability '%(cap)s' ",
+                    #     {'cap': scope[index]})
                     return False
 
             # Make all capability values a list so we can handle lists

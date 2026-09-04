@@ -35,13 +35,15 @@ class NovaServiceCollector(BaseCollector.BaseCollector):
             self.config['auth_url']
         ))
 
-        g_status = GaugeMetricFamily('nova_compute_service_status',
-                                      'An admin has enabled or disabled that service',
-                                      labels=['availability_zone', 'host'])
+        g_status = GaugeMetricFamily(
+            'nova_compute_service_status',
+            'An admin has enabled or disabled that service',
+            labels=['availability_zone', 'host'])
 
-        g_state  = GaugeMetricFamily('nova_compute_service_state',
-                                      'That running service is working or not',
-                                      labels=['availability_zone', 'host'])
+        g_state = GaugeMetricFamily(
+            'nova_compute_service_state',
+            'That running service is working or not',
+            labels=['availability_zone', 'host'])
 
         for service in self.client.compute.services(binary='nova-compute'):
 
