@@ -69,7 +69,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
         # Define metrics for description
         label_names = [
             'name', 'pool_name', 'host', 'share_backend_name',
-            'share_backend_fqdn', 'driver_version', 'hardware_state'
+            'netapp_cluster_name', 'driver_version', 'hardware_state'
         ]
 
         yield GaugeMetricFamily(
@@ -131,7 +131,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
                 'max_over_subscription_ratio', 1),
             "hardware_state": capabilities.get('hardware_state', 'N/A'),
             "share_backend_name": capabilities.get('share_backend_name', 'N/A'),
-            "share_backend_fqdn": capabilities.get('share_backend_host', 'N/A'),
+            "netapp_cluster_name": capabilities.get('netapp_cluster_name', 'N/A'),
             "driver_version": str(capabilities.get('driver_version', 'N/A'))
         }
 
@@ -140,7 +140,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
             name, description,
             labels=[
                 'name', 'pool_name', 'host', 'share_backend_name',
-                'share_backend_fqdn', 'driver_version', 'hardware_state'
+                'netapp_cluster_name', 'driver_version', 'hardware_state'
             ]
         )
         metric.add_metric(labels, value)
@@ -172,7 +172,7 @@ class ManilaBackendCollector(BaseCollector.BaseCollector):
                 data['pool_name'],
                 data['host'],
                 data['share_backend_name'],
-                data['share_backend_fqdn'],
+                data['netapp_cluster_name'],
                 data['driver_version'],
                 data['hardware_state']
             ]
