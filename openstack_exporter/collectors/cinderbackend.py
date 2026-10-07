@@ -139,6 +139,10 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                                 'Cinder Reserved Space Percentage')
         yield GaugeMetricFamily('cinder_percent_free',
                                 'Cinder Percentage of available space is free.')
+        yield GaugeMetricFamily(
+            'cinder_pool_aggregate_id_missing',
+            'Whether the Cinder pool has no aggregate ID.'
+        )
 
     def _debug_gauge(self, gauge, name, value, shard, backend, pool):
         LOG.debug(f"({shard}/{backend}/{pool})-{name} = {value}")
@@ -264,6 +268,13 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 {'aggregate_id': aggregate_id},
                 shard_name, backend, pool_name, az
             )
+
+        yield self.add_gauge_metric_gauge(
+            'cinder_pool_aggregate_id_missing',
+            'Whether the Cinder pool has no aggregate ID.',
+            int(not aggregate_id),
+            shard_name, backend, pool_name, az
+        )
 
         if can_overcommit:
             yield self.add_gauge_metric_gauge(
