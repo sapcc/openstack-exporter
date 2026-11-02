@@ -17,7 +17,6 @@
 import logging
 from prometheus_client.core import GaugeMetricFamily, InfoMetricFamily
 
-from cachetools import cached, TTLCache
 from cinderclient import client as cinder
 from openstack_exporter import BaseCollector
 
@@ -25,15 +24,11 @@ from openstack_exporter.utils import cinder as cinder_utils
 
 LOG = logging.getLogger('openstack_exporter.exporter')
 
-DEFAULT_VALID_SHARDING_BACKENDS = ['standard_hdd', 'vmware', 'vmware_fcd']
-DEFAULT_VALID_NO_SHARD_BACKENDS = []
-ALLOW_UNEXPECTED_BACKENDS_DEFAULT = False
-
 
 class CinderBackendCollector(BaseCollector.BaseCollector):
     """Collect metrics for Cinder backends and pools."""
 
-    version = "1.0.3"
+    version = "1.1.0"
 
     def __init__(self, openstack_config, collector_config):
         """Initialize the Cinder backend collector."""
@@ -46,33 +41,6 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         self.aggregate_labels = ['backend', 'pool', 'shard']
         LOG.debug(f"Openstack Exporter CinderBackend Version {self.version}")
         LOG.debug(f"Collector configuration {self.collector_config}")
-        # Make sure there is a default setting for valid_backends
-        cinder_config = self.collector_config['cinderbackend']
-        if 'expected_sharding_backends' not in cinder_config:
-            self.expected_sharding_backends = DEFAULT_VALID_SHARDING_BACKENDS
-        else:
-            backends = cinder_config['expected_sharding_backends']
-            self.expected_sharding_backends = [x.strip() for x in backends.split(',')]
-        if 'expected_no_sharding_backends' not in cinder_config:
-            self.expected_no_sharding_backends = DEFAULT_VALID_NO_SHARD_BACKENDS
-        else:
-            backends = cinder_config['expected_no_sharding_backends']
-            self.expected_no_sharding_backends = [x.strip() for x in backends.split(',')]
-
-        self.allow_unexpected_backends = cinder_config.get(
-            'allow_unexpected_backends', ALLOW_UNEXPECTED_BACKENDS_DEFAULT)
-        # Create a combined set of all explicitly expected backends for quick lookup
-        # This is used to determine if a backend should have "down" metrics emitted
-        self.expected_backends_set = (
-            set(self.expected_sharding_backends) |
-            set(self.expected_no_sharding_backends)
-        )
-        LOG.debug("Allowed Expected Sharding Backends "
-                  f"{self.expected_sharding_backends}")
-        LOG.debug("Allowed Expected Non Sharding Backends "
-                  f"{self.expected_no_sharding_backends}")
-        LOG.debug(f"Allow Unexpected Backends? {self.allow_unexpected_backends}")
-        LOG.debug(f"Shards discovered: {self.shards()}")
 
     def _cinder_client(self):
         """Create a Cinder client for quota functions."""
@@ -103,17 +71,6 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
             os_auth_url,
             **client_args,
         )
-
-    # Cache the shards for 30 minutes since it's painful to fetch
-    @cached(cache=TTLCache(maxsize=50, ttl=1800))
-    def shards(self):
-        """Return the configured Cinder shard names."""
-        shard_names = []
-        LOG.debug("Fetching shard names")
-        for agg in self.client.compute.aggregates():
-            if agg.name.startswith('vc-'):
-                shard_names.append(agg.name)
-        return shard_names
 
     def describe(self):
         """Describe the metrics emitted by this collector."""
@@ -360,15 +317,10 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         """Collect Cinder backend metrics.
 
         This calls the cinder scheduler api to get all the pool stats
-        that the scheduler sees.  If a backend is down and the stats aren't
-        being collected by the driver for that backend, then the scheduler will
-        not have any stats.  The collector has an expected list of backends
-        that it wants to see coming from the scheduler API.  The execpted
-        backends are configurable in the config file.  See the sample config
-
-        For each expected backend the collector will report stats.
-        If the backend isn't seen in the stats from the scheduler API,
-        then the collector will report 0 capacity.
+        that the scheduler sees and reports a metric set for every pool
+        returned.  Backends are not filtered by name, so a backend that is
+        down reports no stats (the scheduler has none for it) rather than a
+        synthetic 0 capacity series.
 
         """
         LOG.info("Collect cinder backend info. {}".format(
@@ -387,20 +339,9 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
         # build the aggregated pools list so we can report them as well.
         aggregated_pools = cinder_utils.aggregate_pools(pools)
 
-        # Keep a count of each backend in each shard for each pool.
-        # If we don't see any pools in a shard/backend then it's down and
-        # we will report that shard/backend as reporting 0 capacity.
-        default_shard_backends = dict([(key, 0) for key in self.expected_sharding_backends])
-        default_no_shard_backends = dict([(key, 0) for key in self.expected_no_sharding_backends])
         # 'None' key means the shard name 'None' for backends
         # That aren't affiliated with sharding.
         no_shard = 'None'
-        seen_backends = {no_shard: default_no_shard_backends.copy()}
-        # populate the seen_backends with expected shards
-        for shard_name in self.shards():
-            seen_backends[shard_name] = default_shard_backends.copy()
-        LOG.debug(f"Expecting backends {self.expected_sharding_backends}")
-        LOG.debug(f"Initial stats {seen_backends}")
         for volume_type_name in pools:
             for pool in pools[volume_type_name]:
                 caps = pool['capabilities']
@@ -414,10 +355,6 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 else:
                     LOG.debug(f"Backend {backend} has no associated volume type")
 
-                # initialize the accounting for the shard
-                if shard_name not in seen_backends:
-                    seen_backends[shard_name] = default_shard_backends.copy()
-
                 data = cinder_utils.parse_pool_data(pool, volume_type)
                 pool_name = data['pool']
 
@@ -427,45 +364,8 @@ class CinderBackendCollector(BaseCollector.BaseCollector):
                 else:
                     LOG.debug(f"Got stats for {self.region} {backend}/{pool_name}")
 
-                # Are we allowed to report this backend?
-                report = False
-                if backend in seen_backends[shard_name]:
-                    seen_backends[shard_name][backend] += 1
-                    report = True
-                elif self.allow_unexpected_backends:
-                    LOG.debug(f"Adding unexpected backend {backend} "
-                            f"to shard {shard_name}")
-                    seen_backends[shard_name][backend] = 1
-                    report = True
-                else:
-                    LOG.warning(f"Backend {backend} is not in expected "
-                                f"backends {self.expected_sharding_backends}")
-
-                if report:
-                    yield from self._report_stats(
-                        shard_name, backend, data, caps, quota_obj)
-                else:
-                    LOG.warning(f"Not reporting stats for {self.region} "
-                     f"{shard_name}/{backend}/{pool_name}")
-
-        LOG.debug(f"seen backends {seen_backends}")
-        for shard in seen_backends:
-            for backend in seen_backends[shard]:
-                if seen_backends[shard][backend] == 0:
-                    # Only emit "down" metrics for explicitly expected backends,
-                    # not for backends discovered via allow_unexpected_backends
-                    if backend in self.expected_backends_set:
-                        LOG.warning(f"{shard} / {backend} is down - no pools reporting")
-                        yield self.add_gauge_metric_gauge(
-                            'cinder_free_capacity_gib',
-                            'Cinder reported free capacity in GiB',
-                            0, shard, backend, "backend_down", "unknown"
-                        )
-                    else:
-                        LOG.debug(
-                            f"{shard} / {backend} has count 0 but is not an "
-                            "expected backend - skipping down metric"
-                        )
+                yield from self._report_stats(
+                    shard_name, backend, data, caps, quota_obj)
 
         for pool_name in aggregated_pools:
             yield from self._report_aggregated_stats(
